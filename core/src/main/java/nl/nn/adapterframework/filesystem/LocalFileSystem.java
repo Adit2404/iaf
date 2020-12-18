@@ -16,7 +16,6 @@
 package nl.nn.adapterframework.filesystem;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -32,6 +31,7 @@ import org.apache.logging.log4j.Logger;
 
 import nl.nn.adapterframework.configuration.ConfigurationException;
 import nl.nn.adapterframework.doc.IbisDoc;
+import nl.nn.adapterframework.stream.Message;
 import nl.nn.adapterframework.util.LogUtil;
 import nl.nn.adapterframework.util.WildCardFilter;
 
@@ -41,7 +41,7 @@ import nl.nn.adapterframework.util.WildCardFilter;
  * @author Gerrit van Brakel
  *
  */
-public class LocalFileSystem implements IWritableFileSystem<Path> {
+public class LocalFileSystem extends FileSystemBase<Path> implements IWritableFileSystem<Path> {
 	protected Logger log = LogUtil.getLogger(this);
 
 	private String root;
@@ -53,15 +53,6 @@ public class LocalFileSystem implements IWritableFileSystem<Path> {
 		// No Action is required
 	}
 
-	@Override
-	public void open() {
-		// No Action is required
-	}
-
-	@Override
-	public void close() {
-		// No Action is required
-	}
 
 	@Override
 	public Path toFile(String filename) {
@@ -123,8 +114,8 @@ public class LocalFileSystem implements IWritableFileSystem<Path> {
 	}
 
 	@Override
-	public InputStream readFile(Path f) throws IOException {
-		return Files.newInputStream(f);
+	public Message readFile(Path f) throws IOException {
+		return new Message(f);
 	}
 
 	@Override
@@ -175,7 +166,7 @@ public class LocalFileSystem implements IWritableFileSystem<Path> {
 		try {
 			return Files.move(source, destination);
 		} catch (IOException e) {
-			throw new FileSystemException("Cannot rename folder ["+ source.toString() +"] to ["+ destination.toString() +"]", e);
+			throw new FileSystemException("Cannot rename file ["+ source.toString() +"] to ["+ destination.toString() +"]", e);
 		}
 	}
 	

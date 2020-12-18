@@ -16,7 +16,6 @@
 package nl.nn.adapterframework.filesystem;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.DirectoryStream;
 import java.util.Date;
@@ -34,6 +33,7 @@ import jcifs.smb.SmbFileInputStream;
 import jcifs.smb.SmbFileOutputStream;
 import nl.nn.adapterframework.configuration.ConfigurationException;
 import nl.nn.adapterframework.doc.IbisDoc;
+import nl.nn.adapterframework.stream.Message;
 import nl.nn.adapterframework.util.CredentialFactory;
 import nl.nn.adapterframework.util.LogUtil;
 
@@ -42,7 +42,7 @@ import nl.nn.adapterframework.util.LogUtil;
  * @author alisihab
  *
  */
-public class Samba1FileSystem implements IWritableFileSystem<SmbFile> {
+public class Samba1FileSystem extends FileSystemBase<SmbFile> implements IWritableFileSystem<SmbFile> {
 
 	protected Logger log = LogUtil.getLogger(this);
 
@@ -81,12 +81,7 @@ public class Samba1FileSystem implements IWritableFileSystem<SmbFile> {
 		} catch (IOException e) {
 			throw new FileSystemException(e);
 		}
-
-	}
-
-	@Override
-	public void close() {
-		// Automatically closes
+		super.open();
 	}
 
 	@Override
@@ -150,9 +145,9 @@ public class Samba1FileSystem implements IWritableFileSystem<SmbFile> {
 	}
 
 	@Override
-	public InputStream readFile(SmbFile f) throws IOException {
+	public Message readFile(SmbFile f) throws IOException {
 		SmbFileInputStream is = new SmbFileInputStream(f);
-		return is;
+		return new Message(is);
 	}
 
 	@Override

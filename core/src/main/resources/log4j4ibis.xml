@@ -75,6 +75,13 @@
 			</Policies>
 			<RolloverStrategy type="DefaultRolloverStrategy" max="5" fileIndex="min" />
 		</Appender>
+		<Appender type="RollingFile" name="ladybug" fileName="${ctx:log.dir}/testtool4${ctx:instance.name.lc}.log" filePattern="${ctx:log.dir}/testtool4${ctx:instance.name.lc}.log.%i">
+			<Layout type="PatternLayout" pattern="%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%t] %c %m%n"/>
+			<Policies>
+				<Policy type="SizeBasedTriggeringPolicy" size="${ctx:log.maxFileSize}" />
+			</Policies>
+			<RolloverStrategy type="DefaultRolloverStrategy" max="${ctx:log.maxBackupIndex}" fileIndex="min" />
+		</Appender>
 	</Appenders>
 
 	<Loggers>
@@ -82,6 +89,9 @@
 		<Logger name="nl.nn.adapterframework.testtool" level="WARN" />
 		<Logger name="org.apache" level="INFO" />
 		<Logger name="org.apache.commons" level="WARN" />
+		<Logger name="org.apache.cxf" level="WARN" />
+		<Logger name="bitronix.tm" level="INFO" />
+		
 		<Logger name="GALM" additivity="false" level="INFO">
 			<AppenderRef ref="galm"/>
 		</Logger>
@@ -96,6 +106,12 @@
 		</Logger>
 		<Logger name="CONFIG" additivity="false" level="INFO">
 			<AppenderRef ref="config"/>
+		</Logger>
+		<Logger name="nl.nn.testtool" additivity="false" level="INFO">
+			<AppenderRef ref="ladybug"/>
+		</Logger>
+		<Logger name="nl.nn.ibistesttool" additivity="false" level="INFO">
+			<AppenderRef ref="ladybug"/>
 		</Logger>
 
 		<!-- This is an example of a custom logger that prints all log messages of the IbisContext class to sysout -->
@@ -122,8 +138,18 @@
 		<!-- Logger name="org.apache.cxf" level="DEBUG" additivity="false">
 			<AppenderRef ref="stdout"/>
 		</Logger -->
+ 		<!-- Logger name="nl.nn.testtool.TestTool" level="DEBUG" additivity="false">
+			<AppenderRef ref="stdout"/>
+		</Logger -->
+		<!-- Logger name="nl.nn.testtool.Report" level="DEBUG" additivity="false">
+			<AppenderRef ref="stdout"/>
+		</Logger -->
+		<!-- Show Tibet2 metadata query -->
+		<!-- Logger name="nl.nn.ibistesttool.storage.tibet2.Storage" level="DEBUG" additivity="false">
+			<AppenderRef ref="stdout"/>
+		</Logger -->
 
-		<Root level="WARN">
+		<Root level="${ctx:log.level}">
 			<AppenderRef ref="file"/>
 			<AppenderRef ref="XML"/>
 		</Root>

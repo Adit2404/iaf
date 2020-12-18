@@ -120,6 +120,10 @@ public class JdbcFacade extends JNDIBase implements HasPhysicalDestination, IXAE
 				log.debug(getLogPrefix()+"looking up proxied Datasource ["+dsName+"]");
 				datasource = (DataSource)proxiedDataSources.get(dsName);
 			} else {
+				if (proxiedDataSources != null) {
+					ConfigurationWarnings.add(this, log, "data source '" + dsName
+							+ "' isn't part of proxiedDataSources and is therefore probably not known to the transaction manager");
+				}
 				String prefixedDsName=getJndiContextPrefix()+dsName;
 				log.debug(getLogPrefix()+"looking up Datasource ["+prefixedDsName+"]");
 				if (StringUtils.isNotEmpty(getJndiContextPrefix())) {
@@ -158,8 +162,7 @@ public class JdbcFacade extends JNDIBase implements HasPhysicalDestination, IXAE
 				// the default and result in the following exception when (for
 				// example?) a ResultSetIteratingPipe is calling next() on the
 				// ResultSet after it's sender has called a pipeline which
-				// contains a GenericMessageSendingPipe using
-				// transactionAttribute="NotSupported":
+				// contains a SenderPipe using transactionAttribute="NotSupported":
 				//   com.ibm.websphere.ce.cm.ObjectClosedException: DSRA9110E: ResultSet is closed.
 				ConfigurationWarnings.add(this, log, "The database's default holdability for ResultSet objects is " + md.getResultSetHoldability() + " instead of " + ResultSet.HOLD_CURSORS_OVER_COMMIT + " (ResultSet.HOLD_CURSORS_OVER_COMMIT)");
 			}

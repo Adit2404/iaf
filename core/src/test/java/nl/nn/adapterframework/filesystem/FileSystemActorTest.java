@@ -12,7 +12,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Writer;
 
-import org.hamcrest.core.IsInstanceOf;
 import org.hamcrest.core.StringContains;
 import org.junit.Before;
 import org.junit.FixMethodOrder;
@@ -29,7 +28,6 @@ import nl.nn.adapterframework.parameters.ParameterValueList;
 import nl.nn.adapterframework.stream.Message;
 import nl.nn.adapterframework.stream.MessageOutputStream;
 import nl.nn.adapterframework.testutil.TestAssertions;
-import nl.nn.adapterframework.util.Misc;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public abstract class FileSystemActorTest<F, FS extends IWritableFileSystem<F>> extends HelperedFileSystemTestBase {
@@ -82,9 +80,89 @@ public abstract class FileSystemActorTest<F, FS extends IWritableFileSystem<F>> 
 
 	@Test
 	public void fileSystemActorTestConfigureNoAction() throws Exception {
-		thrown.expectMessage("action must be specified");
+		thrown.expectMessage("either attribute [action] or parameter [action] must be specified");
 		thrown.expectMessage("fake owner of FileSystemActor");
 		actor.configure(fileSystem,null,owner);
+	}
+
+	@Test
+	public void fileSystemActorEmptyParameterAction() throws Exception {
+		thrown.expectMessage("unable to resolve the value of parameter");
+		String filename = "emptyParameterAction" + FILE1;
+		String contents = "Tekst om te lezen";
+
+		createFile(null, filename, contents);
+		waitForActionToFinish();
+
+		ParameterList params = new ParameterList();
+		Parameter p = new Parameter();
+		p.setName("action");
+		p.setValue("");
+		params.add(p);
+		params.configure();
+
+		actor.configure(fileSystem,params,owner);
+		actor.open();
+
+		Message message= new Message(filename);
+		ParameterValueList pvl = params.getValues(new Message(""), session);
+
+		actor.doAction(message, pvl, session);
+	}
+
+	@Test
+	public void fileSystemActorEmptyParameterActionWillBeOverridenByConfiguredAction() throws Exception {
+		String filename = "overwriteEmptyParameter" + FILE1;
+		String contents = "Tekst om te lezen";
+
+		createFile(null, filename, contents);
+		waitForActionToFinish();
+
+		ParameterList params = new ParameterList();
+		Parameter p = new Parameter();
+		p.setName("action");
+		p.setValue(null);
+		params.add(p);
+		params.configure();
+		actor.setAction("read");
+		actor.configure(fileSystem,params,owner);
+		actor.open();
+
+		Message message= new Message(filename);
+		ParameterValueList pvl = params.getValues(null, session);
+
+		Message result = (Message)actor.doAction(message, pvl, session);
+		assertEquals(contents, result.asString());
+	}
+
+	@Test
+	public void fileSystemActorParameterActionAndAttributeActionConfigured() throws Exception {
+		String filename = "actionParamAndAttr" + FILE1;
+		String contents = "Text to read";
+
+		createFile(null, filename, contents);
+		waitForActionToFinish();
+
+		ParameterList params = new ParameterList();
+		Parameter pAction = new Parameter();
+		pAction.setName("action");
+		pAction.setValue("read");
+		params.add(pAction);
+		Parameter pFilename = new Parameter();
+		pFilename.setName("filename");
+		pFilename.setValue(filename);
+		params.add(pFilename);
+		params.configure();
+
+		actor.setAction("write");
+		actor.configure(fileSystem,params,owner);
+		actor.open();
+
+		Message message= new Message(filename);
+		ParameterValueList pvl = params.getValues(null, session);
+
+		Message result = (Message)actor.doAction(message, pvl, session);
+		assertEquals(contents, result.asString());
 	}
 
 	@Test
@@ -316,6 +394,31 @@ public abstract class FileSystemActorTest<F, FS extends IWritableFileSystem<F>> 
 		fileSystemActorInfoActionTest(true);
 	}
 
+	@Test
+	public void fileSystemActorReadActionFromParameterTest() throws Exception {
+		String filename = "parameterAction" + FILE1;
+		String contents = "Tekst om te lezen";
+
+		createFile(null, filename, contents);
+		waitForActionToFinish();
+
+		ParameterList params = new ParameterList();
+		Parameter p = new Parameter();
+		p.setName("action");
+		p.setValue("read");
+		params.add(p);
+		params.configure();
+		
+		actor.configure(fileSystem,params,owner);
+		actor.open();
+
+		Message message= new Message(filename);
+		ParameterValueList pvl = params.getValues(message, session);
+
+		Message result = (Message)actor.doAction(message, pvl, session);
+		assertEquals(contents, result.asString());
+		assertTrue(_fileExists(filename));
+	}
 
 	public void fileSystemActorReadActionTest(String action, boolean fileViaAttribute, boolean fileShouldStillExistAfterwards) throws Exception {
 		String filename = "sender" + FILE1;
@@ -333,10 +436,9 @@ public abstract class FileSystemActorTest<F, FS extends IWritableFileSystem<F>> 
 		
 		Message message= new Message(fileViaAttribute?null:filename);
 		ParameterValueList pvl = null;
-		Object result = actor.doAction(message, pvl, session);
-		assertThat(result, IsInstanceOf.instanceOf(InputStream.class));
-		String actualContents = Misc.streamToString((InputStream)result);
-		assertEquals(contents, actualContents);
+
+		Message result = Message.asMessage(actor.doAction(message, pvl, session));
+		assertEquals(contents, result.asString());
 		assertEquals(fileShouldStillExistAfterwards, _fileExists(filename));
 	}
 

@@ -1,5 +1,5 @@
 /*
-   Copyright 2016, 2020 Nationale-Nederlanden
+   Copyright 2016, 2020 Nationale-Nederlanden, 2020 WeAreFrank!
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import nl.nn.adapterframework.http.RestListenerUtils;
 import nl.nn.adapterframework.soap.Wsdl;
 import nl.nn.adapterframework.stream.Message;
 import nl.nn.adapterframework.util.AppConstants;
+import nl.nn.adapterframework.util.StreamUtil;
 
 /**
  * Generate WSDL of parent or specified adapter.
@@ -45,7 +46,7 @@ public class WsdlGeneratorPipe extends FixedForwardPipe {
 	public void configure() throws ConfigurationException {
 		super.configure();
 		if (!"parent".equals(getFrom()) && !"input".equals(getFrom())) {
-			throw new ConfigurationException(getLogPrefix(null) + " from should either be parent or input");
+			throw new ConfigurationException("from should either be parent or input");
 		}
 		dtapStage=AppConstants.getInstance().getResolvedProperty("dtap.stage");
 		dtapSide=AppConstants.getInstance().getResolvedProperty("dtap.side");
@@ -74,7 +75,7 @@ public class WsdlGeneratorPipe extends FixedForwardPipe {
 			wsdl.init();
 			ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 			wsdl.wsdl(outputStream, null);
-			result = outputStream.toString("UTF-8");
+			result = outputStream.toString(StreamUtil.DEFAULT_INPUT_STREAM_ENCODING);
 		} catch (Exception e) {
 			throw new PipeRunException(this, "Could not generate WSDL for adapter [" + adapter.getName() + "]", e); 
 		}

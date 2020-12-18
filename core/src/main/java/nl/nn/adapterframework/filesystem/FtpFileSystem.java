@@ -34,6 +34,7 @@ import org.apache.commons.net.ftp.FTPReply;
 import nl.nn.adapterframework.configuration.ConfigurationException;
 import nl.nn.adapterframework.ftp.FtpConnectException;
 import nl.nn.adapterframework.ftp.FtpSession;
+import nl.nn.adapterframework.stream.Message;
 
 /**
  * 
@@ -43,6 +44,9 @@ import nl.nn.adapterframework.ftp.FtpSession;
 public class FtpFileSystem extends FtpSession implements IWritableFileSystem<FTPFile> {
 
 	private String remoteDirectory = "";
+
+	private boolean open;
+
 
 	@Override
 	public void configure() throws ConfigurationException {
@@ -56,12 +60,21 @@ public class FtpFileSystem extends FtpSession implements IWritableFileSystem<FTP
 		} catch (FtpConnectException e) {
 			throw new FileSystemException("Cannot connect to the FTP server with domain ["+getHost()+"]", e);
 		}
+		open=true;
 	}
 
 	@Override
 	public void close() {
+		open=false;
 		closeClient();
 	}
+
+
+	@Override
+	public boolean isOpen() {
+		return open;
+	}
+
 
 	@Override
 	public FTPFile toFile(String filename) throws FileSystemException {
@@ -75,6 +88,16 @@ public class FtpFileSystem extends FtpSession implements IWritableFileSystem<FTP
 		return toFile(folder+"/"+filename);
 	}
 
+	@Override
+	public int getNumberOfFilesInFolder(String folder) throws FileSystemException {
+		try {
+			FTPFile[] files = ftpClient.listFiles(folder);
+			return files == null? 0 : files.length;
+		} catch (IOException e) {
+			throw new FileSystemException(e);
+		}
+	}
+	
 	@Override
 	public DirectoryStream<FTPFile> listFiles(String folder) throws FileSystemException {
 		try {
@@ -123,10 +146,10 @@ public class FtpFileSystem extends FtpSession implements IWritableFileSystem<FTP
 	}
 
 	@Override
-	public InputStream readFile(FTPFile f) throws FileSystemException, IOException {
+	public Message readFile(FTPFile f) throws FileSystemException, IOException {
 		InputStream inputStream = ftpClient.retrieveFileStream(f.getName());
 		ftpClient.completePendingCommand();
-		return inputStream;
+		return new Message(inputStream);
 	}
 
 	@Override
@@ -287,4 +310,5 @@ public class FtpFileSystem extends FtpSession implements IWritableFileSystem<FTP
 			}
 		}
 	}
+
 }

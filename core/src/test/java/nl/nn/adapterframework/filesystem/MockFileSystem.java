@@ -1,7 +1,6 @@
 package nl.nn.adapterframework.filesystem;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.DirectoryStream;
 import java.util.Arrays;
@@ -13,6 +12,7 @@ import java.util.Map;
 import org.apache.logging.log4j.Logger;
 
 import nl.nn.adapterframework.configuration.ConfigurationException;
+import nl.nn.adapterframework.stream.Message;
 import nl.nn.adapterframework.util.LogUtil;
 
 public class MockFileSystem<M extends MockFile> extends MockFolder implements IWritableFileSystem<M> {
@@ -60,6 +60,12 @@ public class MockFileSystem<M extends MockFile> extends MockFolder implements IW
 		}
 		
 	}
+
+	@Override
+	public boolean isOpen() {
+		return opened;
+	}
+
 
 	private void checkOpenAndExists(MockFile f) throws FileSystemException {
 		checkOpen();
@@ -114,6 +120,19 @@ public class MockFileSystem<M extends MockFile> extends MockFolder implements IW
 	}
 
 	@Override
+	public int getNumberOfFilesInFolder(String folderName) throws FileSystemException {
+		checkOpen();
+		MockFolder folder=folderName==null?this:getFolders().get(folderName);
+		if (folder==null) {
+			throw new FileSystemException("folder ["+folderName+"] is null");
+		}
+		Map<String,MockFile>files = folder.getFiles();
+		if (files==null) {
+			throw new FileSystemException("files in folder ["+folderName+"] is null");
+		}
+		return files.size();
+	}
+	@Override
 	public DirectoryStream<M> listFiles(String folderName) throws FileSystemException {
 		checkOpen();
 		MockFolder folder=folderName==null?this:getFolders().get(folderName);
@@ -156,9 +175,9 @@ public class MockFileSystem<M extends MockFile> extends MockFolder implements IW
 	}
 
 	@Override
-	public InputStream readFile(MockFile f) throws FileSystemException, IOException {
+	public Message readFile(MockFile f) throws FileSystemException, IOException {
 		checkOpenAndExists(f);
-		return f.getInputStream();
+		return new Message(f.getInputStream());
 	}
 
 	@Override
@@ -285,6 +304,7 @@ public class MockFileSystem<M extends MockFile> extends MockFolder implements IW
 	public String getPhysicalDestinationName() {
 		return "Mock!";
 	}
+
 
 
 

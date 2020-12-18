@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.util.Date;
 import java.util.Iterator;
+import java.util.function.Supplier;
 
 import org.apache.logging.log4j.Logger;
 
@@ -154,12 +155,72 @@ public class FileSystemUtils {
 		}
 	}
 
-	public static <F> DirectoryStream<F> getDirectoryStream(Iterator<F> iterator){
+	public static <F> DirectoryStream<F> getDirectoryStream(Iterable<F> iterable){
 		final DirectoryStream<F> ds = new DirectoryStream<F>() {
 
 			@Override
 			public void close() throws IOException {
-				// nothing to close for now 
+				if (iterable instanceof AutoCloseable) {
+					try {
+						((AutoCloseable)iterable).close();
+					} catch (IOException e) {
+						throw e;
+					} catch (Exception e) {
+						throw new IOException(e);
+					}
+				}
+			}
+
+			@Override
+			public Iterator<F> iterator() {
+				return iterable.iterator();
+			}
+			
+		};
+
+		return ds;
+	}
+	
+	public static <F> DirectoryStream<F> getDirectoryStream(Iterator<F> iterator){
+		return getDirectoryStream(iterator, (Supplier<IOException>)null);
+	}
+
+	public static <F> DirectoryStream<F> getDirectoryStream(Iterator<F> iterator, Runnable onClose) {
+		return getDirectoryStream(iterator, (Supplier<IOException>)() -> { 
+			if (onClose!=null) {
+				onClose.run();
+			}
+			return null;
+		});
+	}
+	
+	public static <F> DirectoryStream<F> getDirectoryStream(Iterator<F> iterator, AutoCloseable resourceToCloseOnClose){
+		return getDirectoryStream(iterator, (Supplier<IOException>)() -> { 
+			if (resourceToCloseOnClose!=null) {
+				try {
+					resourceToCloseOnClose.close();
+					return null;
+				} catch (IOException e) {
+					return e;
+				} catch (Exception e) {
+					return new IOException(e);
+				}
+			}
+			return null;
+		});
+	}
+		
+	public static <F> DirectoryStream<F> getDirectoryStream(Iterator<F> iterator, Supplier<IOException> onClose){
+		final DirectoryStream<F> ds = new DirectoryStream<F>() {
+
+			@Override
+			public void close() throws IOException {
+				if (onClose!=null) {
+					IOException result = onClose.get();
+					if (result!=null) {
+						throw result;
+					}
+				}
 			}
 
 			@Override

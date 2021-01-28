@@ -24,15 +24,12 @@ import java.util.Map;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.ReflectionToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.logging.log4j.Logger;
-import org.springframework.transaction.TransactionDefinition;
 
 import nl.nn.adapterframework.configuration.ClassLoaderManager;
 import nl.nn.adapterframework.configuration.ConfigurationException;
 import nl.nn.adapterframework.configuration.ConfigurationWarnings;
 import nl.nn.adapterframework.core.Adapter;
 import nl.nn.adapterframework.core.DummyNamedObject;
-import nl.nn.adapterframework.core.HasTransactionAttribute;
 import nl.nn.adapterframework.core.IConfigurable;
 import nl.nn.adapterframework.core.IExtendedPipe;
 import nl.nn.adapterframework.core.IPipe;
@@ -43,6 +40,7 @@ import nl.nn.adapterframework.core.PipeLineExit;
 import nl.nn.adapterframework.core.PipeRunException;
 import nl.nn.adapterframework.core.PipeRunResult;
 import nl.nn.adapterframework.core.PipeStartException;
+import nl.nn.adapterframework.core.TransactionAttributes;
 import nl.nn.adapterframework.doc.IbisDoc;
 import nl.nn.adapterframework.monitoring.EventHandler;
 import nl.nn.adapterframework.monitoring.EventThrowing;
@@ -51,9 +49,7 @@ import nl.nn.adapterframework.parameters.Parameter;
 import nl.nn.adapterframework.parameters.ParameterList;
 import nl.nn.adapterframework.stream.Message;
 import nl.nn.adapterframework.util.AppConstants;
-import nl.nn.adapterframework.util.JtaUtil;
 import nl.nn.adapterframework.util.Locker;
-import nl.nn.adapterframework.util.LogUtil;
 import nl.nn.adapterframework.util.XmlUtils;
 
 /**
@@ -98,8 +94,7 @@ import nl.nn.adapterframework.util.XmlUtils;
  *
  * @see IPipeLineSession
  */
-public abstract class AbstractPipe implements IExtendedPipe, HasTransactionAttribute, EventThrowing, IConfigurable {
-	protected Logger log = LogUtil.getLogger(this);
+public abstract class AbstractPipe extends TransactionAttributes implements IExtendedPipe, EventThrowing, IConfigurable {
 	private ClassLoader configurationClassLoader = Thread.currentThread().getContextClassLoader();
 
 	private String name;
@@ -119,8 +114,6 @@ public abstract class AbstractPipe implements IExtendedPipe, HasTransactionAttri
 	private boolean restoreMovedElements=false;
 	private boolean namespaceAware=XmlUtils.isNamespaceAwareByDefault();
 	
-	private int transactionAttribute=TransactionDefinition.PROPAGATION_SUPPORTS;
-	private int transactionTimeout=0;
 	private boolean sizeStatistics = AppConstants.getInstance(configurationClassLoader).getBoolean("statistics.size", false);
 	private Locker locker;
 	private String emptyInputReplacement=null;
@@ -195,6 +188,7 @@ public abstract class AbstractPipe implements IExtendedPipe, HasTransactionAttri
 		}
 
 		eventHandler = MonitorManager.getEventHandler();
+		super.configure();
 	}
 
 	/**
@@ -556,62 +550,6 @@ public abstract class AbstractPipe implements IExtendedPipe, HasTransactionAttri
 		return namespaceAware;
 	}
 
-	@IbisDoc({"3", "Defines transaction and isolation behaviour."
-			+ "For developers: it is equal"
-			+ "to <a href=\"http://java.sun.com/j2ee/sdk_1.2.1/techdocs/guides/ejb/html/Transaction2.html#10494\">EJB transaction attribute</a>."
-			+ "Possible values are:"
-			+ "  <table border=\"1\">"
-			+ "    <tr><th>transactionAttribute</th><th>callers Transaction</th><th>Pipeline excecuted in Transaction</th></tr>"
-			+ "    <tr><td colspan=\"1\" rowspan=\"2\">Required</td>    <td>none</td><td>T2</td></tr>"
-			+ "											      <tr><td>T1</td>  <td>T1</td></tr>"
-			+ "    <tr><td colspan=\"1\" rowspan=\"2\">RequiresNew</td> <td>none</td><td>T2</td></tr>"
-			+ "											      <tr><td>T1</td>  <td>T2</td></tr>"
-			+ "    <tr><td colspan=\"1\" rowspan=\"2\">Mandatory</td>   <td>none</td><td>error</td></tr>"
-			+ "											      <tr><td>T1</td>  <td>T1</td></tr>"
-			+ "    <tr><td colspan=\"1\" rowspan=\"2\">NotSupported</td><td>none</td><td>none</td></tr>"
-			+ "											      <tr><td>T1</td>  <td>none</td></tr>"
-			+ "    <tr><td colspan=\"1\" rowspan=\"2\">Supports</td>    <td>none</td><td>none</td></tr>"
-			+ " 										      <tr><td>T1</td>  <td>T1</td></tr>"
-			+ "    <tr><td colspan=\"1\" rowspan=\"2\">Never</td>       <td>none</td><td>none</td></tr>"
-			+ "											      <tr><td>T1</td>  <td>error</td></tr>"
-			+ "  </table>", "Supports"})
-	public void setTransactionAttribute(String attribute) throws ConfigurationException {
-		transactionAttribute = JtaUtil.getTransactionAttributeNum(attribute);
-		if (transactionAttribute<0) {
-			throw new ConfigurationException("illegal value for transactionAttribute ["+attribute+"]");
-		}
-	}
-	@Override
-	public String getTransactionAttribute() {
-		return JtaUtil.getTransactionAttributeString(transactionAttribute);
-	}
-
-	@IbisDoc({"4", "Like <code>transactionAttribute</code>, but the chosen "
-			+ "option is represented with a number. The numbers mean:"
-			+ "<table>"
-			+ "<tr><td>0</td><td>Required</td></tr>"
-			+ "<tr><td>1</td><td>Supports</td></tr>"
-			+ "<tr><td>2</td><td>Mandatory</td></tr>"
-			+ "<tr><td>3</td><td>RequiresNew</td></tr>"
-			+ "<tr><td>4</td><td>NotSupported</td></tr>"
-			+ "<tr><td>5</td><td>Never</td></tr>"
-			+ "</table>", "1"})
-	public void setTransactionAttributeNum(int i) {
-		transactionAttribute = i;
-	}
-	@Override
-	public int getTransactionAttributeNum() {
-		return transactionAttribute;
-	}
-
-	@IbisDoc({"5", "timeout (in seconds) of transaction started to process a message.", "<code>0</code> (use system default)"})
-	public void setTransactionTimeout(int i) {
-		transactionTimeout = i;
-	}
-	@Override
-	public int getTransactionTimeout() {
-		return transactionTimeout;
-	}
 
 	@Override
 	public boolean hasSizeStatistics() {

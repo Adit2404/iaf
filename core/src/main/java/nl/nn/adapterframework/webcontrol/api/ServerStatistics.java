@@ -51,6 +51,7 @@ import nl.nn.adapterframework.configuration.ConfigurationWarnings;
 import nl.nn.adapterframework.configuration.classloaders.DatabaseClassLoader;
 import nl.nn.adapterframework.core.Adapter;
 import nl.nn.adapterframework.core.IMessageBrowser;
+import nl.nn.adapterframework.core.ProcessState;
 import nl.nn.adapterframework.lifecycle.ApplicationMetrics;
 import nl.nn.adapterframework.logging.IbisMaskingLayout;
 import nl.nn.adapterframework.receivers.Receiver;
@@ -181,7 +182,7 @@ public class ServerStatistics extends Base {
 				long esr = 0;
 				for (Adapter adapter : configuration.getAdapterService().getAdapters().values()) {
 					for (Receiver<?> receiver: adapter.getReceivers()) {
-						IMessageBrowser<?> errorStorage = receiver.getErrorStorageBrowser();
+						IMessageBrowser<?> errorStorage = receiver.getMessageBrowser(ProcessState.ERROR);
 						if (errorStorage != null) {
 							try {
 								esr += errorStorage.getMessageCount();
@@ -355,6 +356,10 @@ public class ServerStatistics extends Base {
 				ApplicationEventPublisher applicationEventPublisher = getIbisManager().getApplicationEventPublisher();
 				if (applicationEventPublisher!=null) {
 					log.info("setting debugger enabled ["+enableDebugger+"]");
+					if(msg.length() > 0)
+						msg.append(", enableDebugger from [" + testtoolEnabled + "] to [" + enableDebugger + "]");
+					else
+						msg.append("enableDebugger changed from [" + testtoolEnabled + "] to [" + enableDebugger + "]");
 					applicationEventPublisher.publishEvent(event);
 				} else {
 					log.warn("no applicationEventPublisher, cannot set debugger enabled to ["+enableDebugger+"]");

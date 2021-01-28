@@ -22,14 +22,11 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.lang.StringUtils;
-import org.apache.logging.log4j.Logger;
-import org.springframework.transaction.TransactionDefinition;
 
 import nl.nn.adapterframework.cache.ICacheAdapter;
 import nl.nn.adapterframework.cache.ICacheEnabled;
 import nl.nn.adapterframework.configuration.ConfigurationException;
 import nl.nn.adapterframework.configuration.ConfigurationWarnings;
-import nl.nn.adapterframework.configuration.SuppressKeys;
 import nl.nn.adapterframework.doc.IbisDoc;
 import nl.nn.adapterframework.extensions.esb.EsbSoapWrapperPipe;
 import nl.nn.adapterframework.jms.JmsException;
@@ -44,11 +41,8 @@ import nl.nn.adapterframework.statistics.StatisticsKeeper;
 import nl.nn.adapterframework.statistics.StatisticsKeeperIterationHandler;
 import nl.nn.adapterframework.stream.Message;
 import nl.nn.adapterframework.util.ClassUtils;
-import nl.nn.adapterframework.util.JtaUtil;
 import nl.nn.adapterframework.util.Locker;
-import nl.nn.adapterframework.util.LogUtil;
 import nl.nn.adapterframework.util.Misc;
-import nl.nn.adapterframework.util.SpringTxManagerProxy;
 
 /**
  * Processor and keeper of a line of {@link IPipe Pipes}.
@@ -104,8 +98,7 @@ import nl.nn.adapterframework.util.SpringTxManagerProxy;
  * 
  * @author  Johan Verrips
  */
-public class PipeLine implements ICacheEnabled<String,String>, HasStatistics {
-    private Logger log = LogUtil.getLogger(this);
+public class PipeLine extends TransactionAttributes implements ICacheEnabled<String,String>, HasStatistics {
 
 	private PipeLineProcessor pipeLineProcessor;
 
@@ -119,8 +112,6 @@ public class PipeLine implements ICacheEnabled<String,String>, HasStatistics {
 
 	private Map<String, PipeForward> globalForwards = new Hashtable<String, PipeForward>();
 	private String firstPipe;
-	private int transactionAttribute = TransactionDefinition.PROPAGATION_SUPPORTS;
-	private int transactionTimeout   = 0;
 
 	private Locker locker;
 
@@ -129,12 +120,10 @@ public class PipeLine implements ICacheEnabled<String,String>, HasStatistics {
 	public final static String INPUT_WRAPPER_NAME    = "- pipeline inputWrapper";
 	public final static String OUTPUT_WRAPPER_NAME   = "- pipeline outputWrapper";
 
-	private IValidatorPipe inputValidator  = null;
-	private IValidatorPipe outputValidator = null;
+	private IValidator inputValidator  = null;
+	private IValidator outputValidator = null;
 	private IWrapperPipe inputWrapper    = null;
 	private IWrapperPipe outputWrapper   = null;
-
-	private TransactionDefinition txDef = null;
 
 	private Map<String, IPipe> pipesByName = new LinkedHashMap<String, IPipe>();
 	private List<IPipe> pipes			  = new ArrayList<IPipe>();
@@ -276,8 +265,8 @@ public class PipeLine implements ICacheEnabled<String,String>, HasStatistics {
 			throw new ConfigurationException("no pipe found for firstPipe [" + firstPipe + "]");
 		}
 
-		IValidatorPipe inputValidator = getInputValidator();
-		IValidatorPipe outputValidator = getOutputValidator();
+		IValidator inputValidator = getInputValidator();
+		IValidator outputValidator = getOutputValidator();
 		if (inputValidator!=null && outputValidator==null && inputValidator instanceof IDualModeValidator) {
 			outputValidator=((IDualModeValidator)inputValidator).getResponseValidator();
 			setOutputValidator(outputValidator);
@@ -334,16 +323,7 @@ public class PipeLine implements ICacheEnabled<String,String>, HasStatistics {
 
 		requestSizeStats = new SizeStatisticsKeeper("- pipeline in");
 
-		if (isTransacted() && getTransactionTimeout()>0) {
-			Integer maximumTransactionTimeout = Misc.getMaximumTransactionTimeout();
-			if (maximumTransactionTimeout != null && getTransactionTimeout() > maximumTransactionTimeout) {
-				ConfigurationWarnings.add(null, log, getLogPrefix()+"has a transaction timeout ["+getTransactionTimeout()+"] which exceeds the maximum transaction timeout ["+maximumTransactionTimeout+"]");
-			}
-		}
-
-		int txOption = this.getTransactionAttributeNum();
-		if (log.isDebugEnabled()) log.debug("creating TransactionDefinition for transactionAttribute ["+getTransactionAttribute()+"], timeout ["+getTransactionTimeout()+"]");
-		txDef = SpringTxManagerProxy.getTransactionDefinition(txOption,getTransactionTimeout());
+		super.configure();
 		log.debug(getLogPrefix()+"successfully configured");
 	}
 
@@ -615,10 +595,6 @@ public class PipeLine implements ICacheEnabled<String,String>, HasStatistics {
 
 	}
 
-	public TransactionDefinition getTxDef() {
-		return txDef;
-	}
-
 	public Map<String, PipeLineExit> getPipeLineExits() {
 		return pipeLineExits;
 	}
@@ -667,18 +643,18 @@ public class PipeLine implements ICacheEnabled<String,String>, HasStatistics {
 
 
 	@IbisDoc({"10", "Request validator, or combined validator for request and response"})
-	public void setInputValidator(IValidatorPipe inputValidator) {
+	public void setInputValidator(IValidator inputValidator) {
 		this.inputValidator = inputValidator;
 	}
-	public IValidatorPipe getInputValidator() {
+	public IValidator getInputValidator() {
 		return inputValidator;
 	}
 
 	@IbisDoc({"20", "Optional pipe to validate the response. Can be specified if the response cannot be validated by the request validator"})
-	public void setOutputValidator(IValidatorPipe outputValidator) {
+	public void setOutputValidator(IValidator outputValidator) {
 		this.outputValidator = outputValidator;
 	}
-	public IValidatorPipe getOutputValidator() {
+	public IValidator getOutputValidator() {
 		return outputValidator;
 	}
 
@@ -738,80 +714,6 @@ public class PipeLine implements ICacheEnabled<String,String>, HasStatistics {
 		return firstPipe;
 	}
 
-	@IbisDoc({"2", "The <code>transactionAttribute</code> declares transactional behavior of pipeline execution. It "
-		+ "applies both to database transactions and XA transactions."
-		+ "The pipeline uses this to start a new transaction or suspend the current one when required. "
-		+ "For developers: it is equal"
-		+ "to <a href=\"http://java.sun.com/j2ee/sdk_1.2.1/techdocs/guides/ejb/html/Transaction2.html#10494\">EJB transaction attribute</a>. "
-		+ "Possible values for transactionAttribute:"
-		+ "  <table border=\"1\">"
-		+ "    <tr><th>transactionAttribute</th><th>callers Transaction</th><th>Pipeline excecuted in Transaction</th></tr>"
-		+ "    <tr><td colspan=\"1\" rowspan=\"2\">Required</td>    <td>none</td><td>T2</td></tr>"
-		+ "											      <tr><td>T1</td>  <td>T1</td></tr>"
-		+ "    <tr><td colspan=\"1\" rowspan=\"2\">RequiresNew</td> <td>none</td><td>T2</td></tr>"
-		+ "											      <tr><td>T1</td>  <td>T2</td></tr>"
-		+ "    <tr><td colspan=\"1\" rowspan=\"2\">Mandatory</td>   <td>none</td><td>error</td></tr>"
-		+ "											      <tr><td>T1</td>  <td>T1</td></tr>"
-		+ "    <tr><td colspan=\"1\" rowspan=\"2\">NotSupported</td><td>none</td><td>none</td></tr>"
-		+ "											      <tr><td>T1</td>  <td>none</td></tr>"
-		+ "    <tr><td colspan=\"1\" rowspan=\"2\">Supports</td>    <td>none</td><td>none</td></tr>"
-		+ " 										      <tr><td>T1</td>  <td>T1</td></tr>"
-		+ "    <tr><td colspan=\"1\" rowspan=\"2\">Never</td>       <td>none</td><td>none</td></tr>"
-		+ "											      <tr><td>T1</td>  <td>error</td></tr>"
-		+ "  </table>", "Supports"})
-	public void setTransactionAttribute(String attribute) throws ConfigurationException {
-		transactionAttribute = JtaUtil.getTransactionAttributeNum(attribute);
-		if (transactionAttribute<0) {
-			throw new ConfigurationException("illegal value for transactionAttribute ["+attribute+"]");
-		}
-	}
-	public String getTransactionAttribute() {
-		return JtaUtil.getTransactionAttributeString(transactionAttribute);
-	}
-
-	@IbisDoc({"3", "Like <code>transactionAttribute</code>, but the chosen "
-		+ "option is represented with a number. The numbers mean:"
-		+ "<table>"
-		+ "<tr><td>0</td><td>Required</td></tr>"
-		+ "<tr><td>1</td><td>Supports</td></tr>"
-		+ "<tr><td>2</td><td>Mandatory</td></tr>"
-		+ "<tr><td>3</td><td>RequiresNew</td></tr>"
-		+ "<tr><td>4</td><td>NotSupported</td></tr>"
-		+ "<tr><td>5</td><td>Never</td></tr>"
-		+ "</table>", "1"})
-	@Deprecated
-	public void setTransactionAttributeNum(int i) {
-		transactionAttribute = i;
-	}
-	public int getTransactionAttributeNum() {
-		return transactionAttribute;
-	}
-
-	@Deprecated
-	@IbisDoc({"4", "if set to <code>true, messages will be processed under transaction control. (see below)</code>", "<code>false</code>"})
-	public void setTransacted(boolean transacted) {
-		if (transacted) {
-			ConfigurationWarnings.add(getAdapter(), log, getLogPrefix()+"implementing setting of transacted=true as transactionAttribute=Required", SuppressKeys.TRANSACTION_SUPPRESS_KEY, getAdapter());
-			setTransactionAttributeNum(TransactionDefinition.PROPAGATION_REQUIRED);
-		} else {
-			ConfigurationWarnings.add(getAdapter(), log, getLogPrefix()+"implementing setting of transacted=false as transactionAttribute=Supports", SuppressKeys.TRANSACTION_SUPPRESS_KEY, getAdapter());
-			setTransactionAttributeNum(TransactionDefinition.PROPAGATION_SUPPORTS);
-		}
-	}
-	public boolean isTransacted() {
-		int txAtt = getTransactionAttributeNum();
-		return  txAtt==TransactionDefinition.PROPAGATION_REQUIRED || 
-				txAtt==TransactionDefinition.PROPAGATION_REQUIRES_NEW ||
-				txAtt==TransactionDefinition.PROPAGATION_MANDATORY;
-	}
-
-	@IbisDoc({"5", "Timeout (in seconds) of transaction started to process a message.", "<code>0</code> (use system default)"})
-	public void setTransactionTimeout(int i) {
-		transactionTimeout = i;
-	}
-	public int getTransactionTimeout() {
-		return transactionTimeout;
-	}
 
 	/**
 	 * the exit state of the pipeline on which the receiver will commit the transaction.
